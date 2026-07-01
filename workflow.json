@@ -1,0 +1,116 @@
+{
+  "name": "AI Lead Nurturing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-intake",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "1f1b1a10-0001-4a11-8a01-000000000001",
+      "name": "Webhook - New Lead",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "lead-intake"
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "You are a B2B lead qualification assistant. Given lead details, return ONLY a JSON object with fields: score (1-10), category (hot/warm/cold), and reasoning (one sentence)."
+            },
+            {
+              "role": "user",
+              "content": "={{ JSON.stringify($json) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1f1b1a10-0002-4a11-8a01-000000000002",
+      "name": "AI Lead Scoring",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ JSON.parse($json.message.content).score }}",
+              "operation": "largerEqual",
+              "value2": 7
+            }
+          ]
+        }
+      },
+      "id": "1f1b1a10-0003-4a11-8a01-000000000003",
+      "name": "IF Score >= 7",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "resource": "contact",
+        "operation": "upsert",
+        "email": "={{ $json.email }}",
+        "additionalFields": {}
+      },
+      "id": "1f1b1a10-0004-4a11-8a01-000000000004",
+      "name": "HubSpot - Upsert Contact",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 1,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "channel": "={{ $env.SLACK_CHANNEL_ID }}",
+        "text": "=🔥 New qualified lead: {{ $json.name }} ({{ $json.company }}) — Score: {{ JSON.parse($json.message.content).score }}"
+      },
+      "id": "1f1b1a10-0005-4a11-8a01-000000000005",
+      "name": "Slack - Alert Sales",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "YOUR_SHEET_ID",
+        "options": {}
+      },
+      "id": "1f1b1a10-0006-4a11-8a01-000000000006",
+      "name": "Google Sheets - Log Lead",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 1,
+      "position": [900, 420]
+    }
+  ],
+  "connections": {
+    "Webhook - New Lead": {
+      "main": [[{ "node": "AI Lead Scoring", "type": "main", "index": 0 }]]
+    },
+    "AI Lead Scoring": {
+      "main": [[{ "node": "IF Score >= 7", "type": "main", "index": 0 }]]
+    },
+    "IF Score >= 7": {
+      "main": [
+        [{ "node": "HubSpot - Upsert Contact", "type": "main", "index": 0 }],
+        [{ "node": "Google Sheets - Log Lead", "type": "main", "index": 0 }]
+      ]
+    },
+    "HubSpot - Upsert Contact": {
+      "main": [[{ "node": "Slack - Alert Sales", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "versionId": "00000000-0000-0000-0000-000000000001"
+}
